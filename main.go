@@ -26,7 +26,19 @@ type config struct {
 	Account string `yaml:"account"`
 	// ExcludePaths lists working-directory prefixes where the check is skipped.
 	ExcludePaths []string `yaml:"exclude_paths"`
+	// DisabledRules lists rule IDs that are turned off globally. See the rule* constants.
+	DisabledRules []string `yaml:"disabled_rules"`
 }
+
+// Rule IDs usable in config.DisabledRules.
+const (
+	ruleChaining     = "chaining"
+	ruleGitDashC     = "git_dash_c"
+	ruleCd           = "cd"
+	ruleGhApiWrite   = "gh_api_write"
+	ruleAwsNoProfile = "aws_no_profile"
+	ruleGhPrCreate   = "gh_pr_create"
+)
 
 func configPath() string {
 	if p := os.Getenv("CLAUDE_BASH_GUARD_CONFIG"); p != "" {
@@ -61,6 +73,15 @@ func loadConfig() config {
 func (c config) excludes(cwd string) bool {
 	for _, p := range c.ExcludePaths {
 		if p != "" && strings.HasPrefix(cwd, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c config) disabled(rule string) bool {
+	for _, r := range c.DisabledRules {
+		if r == rule {
 			return true
 		}
 	}
@@ -146,25 +167,25 @@ func (d decision) message(account string) string {
 
 func evaluate(cmd, cwd string, cfg config) decision {
 	stripped := reQuotedDouble.ReplaceAllString(reQuotedSingle.ReplaceAllString(cmd, ""), "")
-	if reChaining.MatchString(stripped) {
+	if !cfg.disabled(ruleChaining) && reChaining.MatchString(stripped) {
 		return blockChaining
 	}
-	if reGitDashC.MatchString(cmd) {
+	if !cfg.disabled(ruleGitDashC) && reGitDashC.MatchString(cmd) {
 		return blockGitDashC
 	}
-	if reCd.MatchString(cmd) {
+	if !cfg.disabled(ruleCd) && reCd.MatchString(cmd) {
 		return blockCd
 	}
-	if reGhApi.MatchString(cmd) && reWriteMethod.MatchString(cmd) {
+	if !cfg.disabled(ruleGhApiWrite) && reGhApi.MatchString(cmd) && reWriteMethod.MatchString(cmd) {
 		if reReviewReply.MatchString(cmd) {
 			return allow
 		}
 		return askGhApiWrite
 	}
-	if reAws.MatchString(cmd) && !reProfileFlag.MatchString(cmd) {
+	if !cfg.disabled(ruleAwsNoProfile) && reAws.MatchString(cmd) && !reProfileFlag.MatchString(cmd) {
 		return blockAwsNoProfile
 	}
-	if reGhPrCreate.MatchString(cmd) && cfg.Account != "" && !cfg.excludes(cwd) {
+	if !cfg.disabled(ruleGhPrCreate) && reGhPrCreate.MatchString(cmd) && cfg.Account != "" && !cfg.excludes(cwd) {
 		if activeAccountFunc() != cfg.Account {
 			return blockGhPrCreateNotBot
 		}
