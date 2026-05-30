@@ -20,6 +20,17 @@ Claude Code の `PreToolUse` Bash フック。`tool_input.command` を JSON で�
 
 ルール 6 は設定ファイル（下記）で `account` を指定したときだけ有効。アクティブアカウントは `gh auth status --active` で判定する。
 
+各ルールは設定ファイルの `disabled_rules` でグローバルに無効化できる。ルール ID は次のとおり:
+
+| ルール | ID |
+|---|---|
+| 1 コマンド連結 | `chaining` |
+| 2 `git -C` | `git_dash_c` |
+| 3 `cd` | `cd` |
+| 4 `gh api` 書き込み | `gh_api_write` |
+| 5 `aws` `--profile` なし | `aws_no_profile` |
+| 6 `gh pr create` アカウント | `gh_pr_create` |
+
 ## 設定ファイル
 
 `gh pr create` のアカウントチェックは設定ファイルで制御する。パスは次の順で解決:
@@ -36,9 +47,14 @@ account: sudame-bot
 # sudame-bot を強制しないリポジトリ用。
 exclude_paths:
   - /Users/sudame/oss
+
+# グローバルに無効化するルール ID の一覧（上記の表を参照）。未知の ID は無視される。
+disabled_rules:
+  - cd
+  - aws_no_profile
 ```
 
-設定ファイルが無い・`account` が空の場合、ルール 6 は何もしない（通過）。除外判定は Claude Code フックの `cwd` を使う。
+設定ファイルが無い・`account` が空の場合、ルール 6 は何もしない（通過）。除外判定は Claude Code フックの `cwd` を使う。`disabled_rules` に挙げたルールは `cwd` に関係なく常に無効になる。
 
 ## ビルド
 

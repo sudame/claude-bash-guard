@@ -80,3 +80,36 @@ func TestGhPrCreateAccountGuard(t *testing.T) {
 		})
 	}
 }
+
+func TestDisabledRules(t *testing.T) {
+	// Stub the active account so the gh_pr_create rule never shells out.
+	orig := activeAccountFunc
+	activeAccountFunc = func() string { return "sudame" }
+	defer func() { activeAccountFunc = orig }()
+
+	tests := []struct {
+		name string
+		cmd  string
+		cfg  config
+		want decision
+	}{
+		{"chaining disabled is allowed", "echo a && echo b", config{DisabledRules: []string{ruleChaining}}, allow},
+		{"git_dash_c disabled is allowed", "git -C /tmp status", config{DisabledRules: []string{ruleGitDashC}}, allow},
+		{"cd disabled is allowed", "cd /tmp", config{DisabledRules: []string{ruleCd}}, allow},
+		{"gh_api_write disabled is allowed", "gh api -X POST repos/foo/bar/issues", config{DisabledRules: []string{ruleGhApiWrite}}, allow},
+		{"aws_no_profile disabled is allowed", "aws s3 ls", config{DisabledRules: []string{ruleAwsNoProfile}}, allow},
+		{"gh_pr_create disabled is allowed", "gh pr create", config{Account: "sudame-bot", DisabledRules: []string{ruleGhPrCreate}}, allow},
+		{"disabling one rule leaves others active", "cd /tmp", config{DisabledRules: []string{ruleChaining}}, blockCd},
+		{"unknown rule id is ignored", "cd /tmp", config{DisabledRules: []string{"bogus"}}, blockCd},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// When evaluate is called with the rule disabled
+			got := evaluate(tt.cmd, "", tt.cfg)
+
+			// Then the decision matches the expected value
+			assert.Equal(t, tt.want, got, "cmd=%q", tt.cmd)
+		})
+	}
+}
