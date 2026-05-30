@@ -16,6 +16,29 @@ Claude Code の `PreToolUse` Bash フック。`tool_input.command` を JSON で�
 | 4 | `gh api` + `-X` / `--method` （ただし下記例外） | **ask** |
 | 4a | `gh api .../comments/<id>/replies -X POST` (PR レビューコメントへの返信) | allow |
 | 5 | `aws ...` で `--profile` なし | block |
+| 6 | `gh pr create` でアクティブな gh アカウントが設定値と不一致 | block（設定時のみ） |
+
+ルール 6 は設定ファイル（下記）で `account` を指定したときだけ有効。アクティブアカウントは `gh auth status --active` で判定する。
+
+## 設定ファイル
+
+`gh pr create` のアカウントチェックは設定ファイルで制御する。パスは次の順で解決:
+
+1. 環境変数 `CLAUDE_BASH_GUARD_CONFIG`
+2. `$XDG_CONFIG_HOME/claude-bash-guard.yaml`
+3. `~/.config/claude-bash-guard.yaml`
+
+```yaml
+# gh pr create に使うべき GitHub アカウント。未設定/空ならこのチェックは無効。
+account: sudame-bot
+
+# 以下のパス配下（プレフィックス一致）では gh pr create のチェックをスキップ。
+# sudame-bot を強制しないリポジトリ用。
+exclude_paths:
+  - /Users/sudame/oss
+```
+
+設定ファイルが無い・`account` が空の場合、ルール 6 は何もしない（通過）。除外判定は Claude Code フックの `cwd` を使う。
 
 ## ビルド
 

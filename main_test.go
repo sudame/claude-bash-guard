@@ -38,10 +38,45 @@ func TestEvaluate(t *testing.T) {
 			cmd := tt.cmd
 
 			// When evaluate is called
-			got := evaluate(cmd)
+			got := evaluate(cmd, "", config{})
 
 			// Then the decision matches the expected value
 			assert.Equal(t, tt.want, got, "cmd=%q", cmd)
+		})
+	}
+}
+
+func TestGhPrCreateAccountGuard(t *testing.T) {
+	tests := []struct {
+		name   string
+		cmd    string
+		cwd    string
+		active string
+		cfg    config
+		want   decision
+	}{
+		{"matching active account is allowed", "gh pr create --fill", "/a", "sudame-bot", config{Account: "sudame-bot"}, allow},
+		{"mismatching active account is blocked", "gh pr create --fill", "/a", "sudame", config{Account: "sudame-bot"}, blockGhPrCreateNotBot},
+		{"no active account is blocked", "gh pr create", "/a", "", config{Account: "sudame-bot"}, blockGhPrCreateNotBot},
+		{"configurable account name", "gh pr create", "/a", "other-bot", config{Account: "other-bot"}, allow},
+		{"empty config account disables the check", "gh pr create", "/a", "sudame", config{}, allow},
+		{"excluded path skips the check", "gh pr create", "/oss/foo", "sudame", config{Account: "sudame-bot", ExcludePaths: []string{"/oss"}}, allow},
+		{"non-excluded path still enforced", "gh pr create", "/work/foo", "sudame", config{Account: "sudame-bot", ExcludePaths: []string{"/oss"}}, blockGhPrCreateNotBot},
+		{"other gh pr command is unaffected", "gh pr list", "/a", "sudame", config{Account: "sudame-bot"}, allow},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given a stubbed active account
+			orig := activeAccountFunc
+			activeAccountFunc = func() string { return tt.active }
+			defer func() { activeAccountFunc = orig }()
+
+			// When evaluate is called
+			got := evaluate(tt.cmd, tt.cwd, tt.cfg)
+
+			// Then the decision matches the expected value
+			assert.Equal(t, tt.want, got, "cmd=%q active=%q", tt.cmd, tt.active)
 		})
 	}
 }
