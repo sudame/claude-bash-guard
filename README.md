@@ -3,7 +3,8 @@
 AI の git/gh 操作を統治するためのツール群。
 
 - `bash-guard` — Claude Code の `PreToolUse` Bash フック。危険・非推奨なコマンドをブロック／確認する。
-- `botpr` — GitHub App(bot) 名義で Pull Request を作るヘルパー。`gh pr create` の代わりに使う。
+- `ghbot` — 任意の `gh` コマンドを GitHub App(bot) 名義で実行する汎用ヘルパー。
+- `botpr` — `ghbot` の `pr create` 特化形。`gh pr create` の代わりに使う。
 
 ## bash-guard
 
@@ -61,7 +62,7 @@ botpr --fill --base main
 # ↑ 内部で `gh pr create --fill --base main` を bot token で実行
 ```
 
-### セットアップ
+### セットアップ（botpr / ghbot 共通）
 
 #### 1. GitHub App を作る（一回だけ）
 
@@ -89,6 +90,26 @@ security find-generic-password -s claude-botpr -a pem -w
 `.pem` ファイルは保存後に削除してよい。
 
 #### 3. 設定ファイルに App 情報を書く（下記参照）
+
+## ghbot
+
+`botpr` を一般化したもので、**任意の `gh` コマンドを bot 名義で**実行する。仕組みは同じ（keychain の鍵 → App JWT → installation token → `GH_TOKEN` をセットして `gh` を実行）。引数はそのまま `gh` に渡す。
+
+```sh
+ghbot pr create --fill              # botpr --fill と同じ
+ghbot issue comment 5 --body "ok"   # issue コメントを bot 名義で
+ghbot api repos/owner/repo/issues -f title=hi
+```
+
+`botpr` は `ghbot pr create ...` の短縮（先頭の `pr create` を省ける）。
+
+注意点:
+
+- App をインストールした repo ＆ 付与した権限の範囲内でだけ動く。
+- installation token は「人間ユーザー」ではなく **App という主体**なので、ログインユーザーを前提にする `gh`（`gh api user`、`@me` 系、`gh auth status` など）は動かない。
+- トークンは都度発行・1時間で失効。トークンは stdout に出さず、内部で `gh` を exec して使い切る。
+
+設定（App ID / installation ID / keychain）は botpr と共有（上記セットアップと下記の設定ファイル）。
 
 ## 設定ファイル
 
@@ -127,7 +148,7 @@ disabled_rules:
 ## ビルド
 
 ```sh
-make build   # → bin/bash-guard, bin/botpr
+make build   # → bin/bash-guard, bin/botpr, bin/ghbot
 make test
 ```
 
@@ -147,4 +168,4 @@ make test
 }
 ```
 
-`botpr` は `bin/botpr` を `PATH` の通った場所に置く（または symlink）と AI から `botpr ...` で呼べる。
+`botpr` / `ghbot` は `bin/botpr` `bin/ghbot` を `PATH` の通った場所に置く（または symlink）と AI から `botpr ...` / `ghbot ...` で呼べる。
