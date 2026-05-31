@@ -6,11 +6,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/sudame/claude-bash-guard/internal/config"
 )
 
 type hookInput struct {
@@ -20,17 +18,7 @@ type hookInput struct {
 	} `json:"tool_input"`
 }
 
-type config struct {
-	// Account is the GitHub account the AI must use for `gh pr create`.
-	// Empty disables the check entirely.
-	Account string `yaml:"account"`
-	// ExcludePaths lists working-directory prefixes where the check is skipped.
-	ExcludePaths []string `yaml:"exclude_paths"`
-	// DisabledRules lists rule IDs that are turned off globally. See the rule* constants.
-	DisabledRules []string `yaml:"disabled_rules"`
-}
-
-// Rule IDs usable in config.DisabledRules.
+// Rule IDs usable in config.Config.DisabledRules.
 const (
 	ruleChaining     = "chaining"
 	ruleGitDashC     = "git_dash_c"
@@ -39,54 +27,6 @@ const (
 	ruleAwsNoProfile = "aws_no_profile"
 	ruleGhPrCreate   = "gh_pr_create"
 )
-
-func configPath() string {
-	if p := os.Getenv("CLAUDE_BASH_GUARD_CONFIG"); p != "" {
-		return p
-	}
-	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
-		return filepath.Join(dir, "claude-bash-guard.yaml")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".config", "claude-bash-guard.yaml")
-}
-
-func loadConfig() config {
-	path := configPath()
-	if path == "" {
-		return config{}
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return config{}
-	}
-	var c config
-	if err := yaml.Unmarshal(data, &c); err != nil {
-		return config{}
-	}
-	return c
-}
-
-func (c config) excludes(cwd string) bool {
-	for _, p := range c.ExcludePaths {
-		if p != "" && strings.HasPrefix(cwd, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func (c config) disabled(rule string) bool {
-	for _, r := range c.DisabledRules {
-		if r == rule {
-			return true
-		}
-	}
-	return false
-}
 
 type askOutput struct {
 	HookSpecificOutput struct {
@@ -137,10 +77,15 @@ const (
 	askGhApiWrite
 	blockAwsNoProfile
 	blockGhPrCreateNotBot
+	blockGhPrCreateUseBotpr
 )
 
 func (d decision) isBlock() bool {
-	return d == blockChaining || d == blockGitDashC || d == blockCd || d == blockAwsNoProfile || d == blockGhPrCreateNotBot
+	switch d {
+	case blockChaining, blockGitDashC, blockCd, blockAwsNoProfile, blockGhPrCreateNotBot, blockGhPrCreateUseBotpr:
+		return true
+	}
+	return false
 }
 
 func (d decision) isAsk() bool {
@@ -161,32 +106,37 @@ func (d decision) message(account string) string {
 		return "aws は --profile を指定してください。"
 	case blockGhPrCreateNotBot:
 		return "gh pr create は " + account + " で行ってください。`gh auth switch --user " + account + "` で切り替えてから実行してください。"
+	case blockGhPrCreateUseBotpr:
+		return "gh pr create は禁止。bot 名義で PR を作るには botpr を使ってください（引数はそのまま gh pr create に渡されます）。"
 	}
 	return ""
 }
 
-func evaluate(cmd, cwd string, cfg config) decision {
+func evaluate(cmd, cwd string, cfg config.Config) decision {
 	stripped := reQuotedDouble.ReplaceAllString(reQuotedSingle.ReplaceAllString(cmd, ""), "")
-	if !cfg.disabled(ruleChaining) && reChaining.MatchString(stripped) {
+	if !cfg.Disabled(ruleChaining) && reChaining.MatchString(stripped) {
 		return blockChaining
 	}
-	if !cfg.disabled(ruleGitDashC) && reGitDashC.MatchString(cmd) {
+	if !cfg.Disabled(ruleGitDashC) && reGitDashC.MatchString(cmd) {
 		return blockGitDashC
 	}
-	if !cfg.disabled(ruleCd) && reCd.MatchString(cmd) {
+	if !cfg.Disabled(ruleCd) && reCd.MatchString(cmd) {
 		return blockCd
 	}
-	if !cfg.disabled(ruleGhApiWrite) && reGhApi.MatchString(cmd) && reWriteMethod.MatchString(cmd) {
+	if !cfg.Disabled(ruleGhApiWrite) && reGhApi.MatchString(cmd) && reWriteMethod.MatchString(cmd) {
 		if reReviewReply.MatchString(cmd) {
 			return allow
 		}
 		return askGhApiWrite
 	}
-	if !cfg.disabled(ruleAwsNoProfile) && reAws.MatchString(cmd) && !reProfileFlag.MatchString(cmd) {
+	if !cfg.Disabled(ruleAwsNoProfile) && reAws.MatchString(cmd) && !reProfileFlag.MatchString(cmd) {
 		return blockAwsNoProfile
 	}
-	if !cfg.disabled(ruleGhPrCreate) && reGhPrCreate.MatchString(cmd) && cfg.Account != "" && !cfg.excludes(cwd) {
-		if activeAccountFunc() != cfg.Account {
+	if !cfg.Disabled(ruleGhPrCreate) && reGhPrCreate.MatchString(cmd) && !cfg.Excludes(cwd) {
+		if cfg.Botpr.Configured() {
+			return blockGhPrCreateUseBotpr
+		}
+		if cfg.Account != "" && activeAccountFunc() != cfg.Account {
 			return blockGhPrCreateNotBot
 		}
 	}
@@ -209,7 +159,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	cfg := loadConfig()
+	cfg := config.Load()
 	d := evaluate(cmd, in.Cwd, cfg)
 	switch {
 	case d.isAsk():
