@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"regexp"
 
 	"github.com/sudame/claude-bash-guard/internal/config"
@@ -25,7 +24,6 @@ const (
 	ruleCd           = "cd"
 	ruleGhApiWrite   = "gh_api_write"
 	ruleAwsNoProfile = "aws_no_profile"
-	ruleGhPrCreate   = "gh_pr_create"
 )
 
 type askOutput struct {
@@ -47,25 +45,7 @@ var (
 	reReviewReply  = regexp.MustCompile(`/comments/[^/\s]+/replies\b`)
 	reAws          = regexp.MustCompile(`^\s*aws\s`)
 	reProfileFlag  = regexp.MustCompile(`--profile\b`)
-	reGhPrCreate   = regexp.MustCompile(`^\s*gh\s+pr\s+create\b`)
-	reActiveAcct   = regexp.MustCompile(`account\s+(\S+)`)
 )
-
-// activeAccountFunc resolves the currently active gh account login.
-// It is a package variable so tests can stub it.
-var activeAccountFunc = ghActiveAccount
-
-func ghActiveAccount() string {
-	out, err := exec.Command("gh", "auth", "status", "--active").CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	m := reActiveAcct.FindSubmatch(out)
-	if m == nil {
-		return ""
-	}
-	return string(m[1])
-}
 
 type decision int
 
@@ -76,13 +56,11 @@ const (
 	blockCd
 	askGhApiWrite
 	blockAwsNoProfile
-	blockGhPrCreateNotBot
-	blockGhPrCreateUseBotpr
 )
 
 func (d decision) isBlock() bool {
 	switch d {
-	case blockChaining, blockGitDashC, blockCd, blockAwsNoProfile, blockGhPrCreateNotBot, blockGhPrCreateUseBotpr:
+	case blockChaining, blockGitDashC, blockCd, blockAwsNoProfile:
 		return true
 	}
 	return false
@@ -92,7 +70,7 @@ func (d decision) isAsk() bool {
 	return d == askGhApiWrite
 }
 
-func (d decision) message(account string) string {
+func (d decision) message() string {
 	switch d {
 	case blockChaining:
 		return "コマンド連結(&&, ;)は禁止。1コマンドずつ実行してください。"
@@ -104,15 +82,11 @@ func (d decision) message(account string) string {
 		return "gh api の書き込みメソッド(-X/--method)は都度確認"
 	case blockAwsNoProfile:
 		return "aws は --profile を指定してください。"
-	case blockGhPrCreateNotBot:
-		return "gh pr create は " + account + " で行ってください。`gh auth switch --user " + account + "` で切り替えてから実行してください。"
-	case blockGhPrCreateUseBotpr:
-		return "gh pr create は禁止。bot 名義で PR を作るには botpr を使ってください（引数はそのまま gh pr create に渡されます）。"
 	}
 	return ""
 }
 
-func evaluate(cmd, cwd string, cfg config.Config) decision {
+func evaluate(cmd string, cfg config.Config) decision {
 	stripped := reQuotedDouble.ReplaceAllString(reQuotedSingle.ReplaceAllString(cmd, ""), "")
 	if !cfg.Disabled(ruleChaining) && reChaining.MatchString(stripped) {
 		return blockChaining
@@ -131,14 +105,6 @@ func evaluate(cmd, cwd string, cfg config.Config) decision {
 	}
 	if !cfg.Disabled(ruleAwsNoProfile) && reAws.MatchString(cmd) && !reProfileFlag.MatchString(cmd) {
 		return blockAwsNoProfile
-	}
-	if !cfg.Disabled(ruleGhPrCreate) && reGhPrCreate.MatchString(cmd) && !cfg.Excludes(cwd) {
-		if cfg.Botpr.Configured() {
-			return blockGhPrCreateUseBotpr
-		}
-		if cfg.Account != "" && activeAccountFunc() != cfg.Account {
-			return blockGhPrCreateNotBot
-		}
 	}
 	return allow
 }
@@ -160,17 +126,17 @@ func main() {
 	}
 
 	cfg := config.Load()
-	d := evaluate(cmd, in.Cwd, cfg)
+	d := evaluate(cmd, cfg)
 	switch {
 	case d.isAsk():
 		out := askOutput{}
 		out.HookSpecificOutput.HookEventName = "PreToolUse"
 		out.HookSpecificOutput.PermissionDecision = "ask"
-		out.HookSpecificOutput.PermissionDecisionReason = d.message(cfg.Account)
+		out.HookSpecificOutput.PermissionDecisionReason = d.message()
 		_ = json.NewEncoder(os.Stdout).Encode(out)
 		os.Exit(0)
 	case d.isBlock():
-		fmt.Fprintln(os.Stderr, "BLOCKED: "+d.message(cfg.Account))
+		fmt.Fprintln(os.Stderr, "BLOCKED: "+d.message())
 		os.Exit(2)
 	}
 	os.Exit(0)
