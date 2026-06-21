@@ -23,13 +23,6 @@ AI の git/gh 操作を統治するためのツール群。
 | 4 | `gh api` + `-X` / `--method` （ただし下記例外） | **ask** |
 | 4a | `gh api .../comments/<id>/replies -X POST` (PR レビューコメントへの返信) | allow |
 | 5 | `aws ...` で `--profile` なし | block |
-| 6 | `gh pr create` | block（設定時のみ。下記参照） |
-
-ルール 6 は設定によって挙動が変わる:
-
-- `botpr` が設定済み（`botpr.app_id` と `botpr.installation_id` がある）→ **常に block** して `botpr` の利用を案内する。bot 名義の PR を強制するため。
-- `botpr` 未設定で `account` 指定あり → アクティブな gh アカウントが `account` と不一致なら block（旧来のアカウント切り替え方式）。アクティブアカウントは `gh auth status --active` で判定する。
-- どちらも未設定 → 何もしない（通過）。
 
 各ルールは設定ファイルの `disabled_rules` でグローバルに無効化できる。ルール ID は次のとおり:
 
@@ -40,7 +33,6 @@ AI の git/gh 操作を統治するためのツール群。
 | 3 `cd` | `cd` |
 | 4 `gh api` 書き込み | `gh_api_write` |
 | 5 `aws` `--profile` なし | `aws_no_profile` |
-| 6 `gh pr create` | `gh_pr_create` |
 
 ## botpr
 
@@ -99,8 +91,7 @@ security find-generic-password -s claude-botpr -a pem -w
 3. `~/.config/claude-bash-guard.yaml`
 
 ```yaml
-# --- botpr 方式 ---
-# app_id と installation_id があれば gh pr create は常に block され botpr が案内される。
+# botpr が installation token を発行するための GitHub App 情報。
 botpr:
   app_id: 123456
   installation_id: 789012
@@ -108,21 +99,13 @@ botpr:
   keychain_service: claude-botpr
   keychain_account: pem
 
-# --- 旧来のアカウント切り替え方式 ---
-# botpr が設定されている場合は無視される。
-# account: sudame-bot
-
-# 以下のパス配下（プレフィックス一致）では gh pr create のチェックをスキップ。
-exclude_paths:
-  - /Users/sudame/oss
-
 # グローバルに無効化するルール ID の一覧（上記の表を参照）。未知の ID は無視される。
 disabled_rules:
   - cd
   - aws_no_profile
 ```
 
-除外判定は Claude Code フックの `cwd` を使う。`disabled_rules` に挙げたルールは `cwd` に関係なく常に無効になる。
+`disabled_rules` に挙げたルールは常に無効になる。
 
 ## ビルド
 
