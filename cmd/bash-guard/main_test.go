@@ -21,10 +21,7 @@ func TestEvaluate(t *testing.T) {
 		{"chaining inside double quotes is allowed", "echo \"a; b\"", allow},
 		{"git -C is blocked", "git -C /tmp status", blockGitDashC},
 		{"plain git status is allowed", "git status", allow},
-		{"cd is blocked", "cd /tmp", blockCd},
-		{"bare cd is blocked", "cd", blockCd},
-		{"aicd is allowed", "aicd /tmp", allow},
-		{"cd inside single quotes is allowed", "echo 'cd /tmp'", allow},
+		{"cd is allowed", "cd /tmp", allow},
 		{"gh api GET (no method flag) is allowed", "gh api user", allow},
 		{"gh api -X POST asks", "gh api -X POST repos/foo/bar/issues", askGhApiWrite},
 		{"gh api --method DELETE asks", "gh api --method DELETE repos/foo/bar", askGhApiWrite},
@@ -57,11 +54,10 @@ func TestDisabledRules(t *testing.T) {
 	}{
 		{"chaining disabled is allowed", "echo a && echo b", config.Config{DisabledRules: []string{ruleChaining}}, allow},
 		{"git_dash_c disabled is allowed", "git -C /tmp status", config.Config{DisabledRules: []string{ruleGitDashC}}, allow},
-		{"cd disabled is allowed", "cd /tmp", config.Config{DisabledRules: []string{ruleCd}}, allow},
 		{"gh_api_write disabled is allowed", "gh api -X POST repos/foo/bar/issues", config.Config{DisabledRules: []string{ruleGhApiWrite}}, allow},
 		{"aws_no_profile disabled is allowed", "aws s3 ls", config.Config{DisabledRules: []string{ruleAwsNoProfile}}, allow},
-		{"disabling one rule leaves others active", "cd /tmp", config.Config{DisabledRules: []string{ruleChaining}}, blockCd},
-		{"unknown rule id is ignored", "cd /tmp", config.Config{DisabledRules: []string{"bogus"}}, blockCd},
+		{"disabling one rule leaves others active", "git -C /tmp status", config.Config{DisabledRules: []string{ruleChaining}}, blockGitDashC},
+		{"unknown rule id is ignored", "git -C /tmp status", config.Config{DisabledRules: []string{"bogus"}}, blockGitDashC},
 	}
 
 	for _, tt := range tests {

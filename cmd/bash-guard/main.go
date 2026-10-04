@@ -21,7 +21,6 @@ type hookInput struct {
 const (
 	ruleChaining     = "chaining"
 	ruleGitDashC     = "git_dash_c"
-	ruleCd           = "cd"
 	ruleGhApiWrite   = "gh_api_write"
 	ruleAwsNoProfile = "aws_no_profile"
 )
@@ -39,7 +38,6 @@ var (
 	reQuotedDouble = regexp.MustCompile(`"[^"]*"`)
 	reChaining     = regexp.MustCompile(`&&|;`)
 	reGitDashC     = regexp.MustCompile(`^\s*git\s+-C\b`)
-	reCd           = regexp.MustCompile(`^\s*cd\b`)
 	reGhApi        = regexp.MustCompile(`^\s*gh\s+api\b`)
 	reWriteMethod  = regexp.MustCompile(`(-X|--method)\s`)
 	reReviewReply  = regexp.MustCompile(`/comments/[^/\s]+/replies\b`)
@@ -53,14 +51,13 @@ const (
 	allow decision = iota
 	blockChaining
 	blockGitDashC
-	blockCd
 	askGhApiWrite
 	blockAwsNoProfile
 )
 
 func (d decision) isBlock() bool {
 	switch d {
-	case blockChaining, blockGitDashC, blockCd, blockAwsNoProfile:
+	case blockChaining, blockGitDashC, blockAwsNoProfile:
 		return true
 	}
 	return false
@@ -75,9 +72,7 @@ func (d decision) message() string {
 	case blockChaining:
 		return "コマンド連結(&&, ;)は禁止。1コマンドずつ実行してください。"
 	case blockGitDashC:
-		return "git -C は禁止。aicd で移動してから実行してください。"
-	case blockCd:
-		return "cd は禁止。代わりに aicd を使ってください。"
+		return "git -C は禁止。cd で移動してから実行してください。"
 	case askGhApiWrite:
 		return "gh api の書き込みメソッド(-X/--method)は都度確認"
 	case blockAwsNoProfile:
@@ -93,9 +88,6 @@ func evaluate(cmd string, cfg config.Config) decision {
 	}
 	if !cfg.Disabled(ruleGitDashC) && reGitDashC.MatchString(cmd) {
 		return blockGitDashC
-	}
-	if !cfg.Disabled(ruleCd) && reCd.MatchString(cmd) {
-		return blockCd
 	}
 	if !cfg.Disabled(ruleGhApiWrite) && reGhApi.MatchString(cmd) && reWriteMethod.MatchString(cmd) {
 		if reReviewReply.MatchString(cmd) {

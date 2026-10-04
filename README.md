@@ -19,10 +19,9 @@ AI の git/gh 操作を統治するためのツール群。
 |---|---|---|
 | 1 | `&&` / `;` でのコマンド連結（引用符内は除外） | block |
 | 2 | `git -C ...` | block |
-| 3 | `cd ...`（`aicd` を案内） | block |
-| 4 | `gh api` + `-X` / `--method` （ただし下記例外） | **ask** |
-| 4a | `gh api .../comments/<id>/replies -X POST` (PR レビューコメントへの返信) | allow |
-| 5 | `aws ...` で `--profile` なし | block |
+| 3 | `gh api` + `-X` / `--method` （ただし下記例外） | **ask** |
+| 3a | `gh api .../comments/<id>/replies -X POST` (PR レビューコメントへの返信) | allow |
+| 4 | `aws ...` で `--profile` なし | block |
 
 各ルールは設定ファイルの `disabled_rules` でグローバルに無効化できる。ルール ID は次のとおり:
 
@@ -30,9 +29,8 @@ AI の git/gh 操作を統治するためのツール群。
 |---|---|
 | 1 コマンド連結 | `chaining` |
 | 2 `git -C` | `git_dash_c` |
-| 3 `cd` | `cd` |
-| 4 `gh api` 書き込み | `gh_api_write` |
-| 5 `aws` `--profile` なし | `aws_no_profile` |
+| 3 `gh api` 書き込み | `gh_api_write` |
+| 4 `aws` `--profile` なし | `aws_no_profile` |
 
 ## botpr
 
@@ -101,7 +99,7 @@ botpr:
 
 # グローバルに無効化するルール ID の一覧（上記の表を参照）。未知の ID は無視される。
 disabled_rules:
-  - cd
+  - git_dash_c
   - aws_no_profile
 ```
 
