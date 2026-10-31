@@ -17,20 +17,18 @@ AI の git/gh 操作を統治するためのツール群。
 
 | # | 条件 | 結果 |
 |---|---|---|
-| 1 | `&&` / `;` でのコマンド連結（引用符内は除外） | block |
-| 2 | `git -C ...` | block |
-| 3 | `gh api` + `-X` / `--method` （ただし下記例外） | **ask** |
-| 3a | `gh api .../comments/<id>/replies -X POST` (PR レビューコメントへの返信) | allow |
-| 4 | `aws ...` で `--profile` なし | block |
+| 1 | `git -C ...` | block |
+| 2 | `gh api` + `-X` / `--method` （ただし下記例外） | **ask** |
+| 2a | `gh api .../comments/<id>/replies -X POST` (PR レビューコメントへの返信) | allow |
+| 3 | `aws ...` で `--profile` なし | block |
 
 各ルールは設定ファイルの `disabled_rules` でグローバルに無効化できる。ルール ID は次のとおり:
 
 | ルール | ID |
 |---|---|
-| 1 コマンド連結 | `chaining` |
-| 2 `git -C` | `git_dash_c` |
-| 3 `gh api` 書き込み | `gh_api_write` |
-| 4 `aws` `--profile` なし | `aws_no_profile` |
+| 1 `git -C` | `git_dash_c` |
+| 2 `gh api` 書き込み | `gh_api_write` |
+| 3 `aws` `--profile` なし | `aws_no_profile` |
 
 ## botpr
 

@@ -19,7 +19,6 @@ type hookInput struct {
 
 // Rule IDs usable in config.Config.DisabledRules.
 const (
-	ruleChaining     = "chaining"
 	ruleGitDashC     = "git_dash_c"
 	ruleGhApiWrite   = "gh_api_write"
 	ruleAwsNoProfile = "aws_no_profile"
@@ -34,22 +33,18 @@ type askOutput struct {
 }
 
 var (
-	reQuotedSingle = regexp.MustCompile(`'[^']*'`)
-	reQuotedDouble = regexp.MustCompile(`"[^"]*"`)
-	reChaining     = regexp.MustCompile(`&&|;`)
-	reGitDashC     = regexp.MustCompile(`^\s*git\s+-C\b`)
-	reGhApi        = regexp.MustCompile(`^\s*gh\s+api\b`)
-	reWriteMethod  = regexp.MustCompile(`(-X|--method)\s`)
-	reReviewReply  = regexp.MustCompile(`/comments/[^/\s]+/replies\b`)
-	reAws          = regexp.MustCompile(`^\s*aws\s`)
-	reProfileFlag  = regexp.MustCompile(`--profile\b`)
+	reGitDashC    = regexp.MustCompile(`^\s*git\s+-C\b`)
+	reGhApi       = regexp.MustCompile(`^\s*gh\s+api\b`)
+	reWriteMethod = regexp.MustCompile(`(-X|--method)\s`)
+	reReviewReply = regexp.MustCompile(`/comments/[^/\s]+/replies\b`)
+	reAws         = regexp.MustCompile(`^\s*aws\s`)
+	reProfileFlag = regexp.MustCompile(`--profile\b`)
 )
 
 type decision int
 
 const (
 	allow decision = iota
-	blockChaining
 	blockGitDashC
 	askGhApiWrite
 	blockAwsNoProfile
@@ -57,7 +52,7 @@ const (
 
 func (d decision) isBlock() bool {
 	switch d {
-	case blockChaining, blockGitDashC, blockAwsNoProfile:
+	case blockGitDashC, blockAwsNoProfile:
 		return true
 	}
 	return false
@@ -69,8 +64,6 @@ func (d decision) isAsk() bool {
 
 func (d decision) message() string {
 	switch d {
-	case blockChaining:
-		return "コマンド連結(&&, ;)は禁止。1コマンドずつ実行してください。"
 	case blockGitDashC:
 		return "git -C は禁止。cd で移動してから実行してください。"
 	case askGhApiWrite:
@@ -82,10 +75,6 @@ func (d decision) message() string {
 }
 
 func evaluate(cmd string, cfg config.Config) decision {
-	stripped := reQuotedDouble.ReplaceAllString(reQuotedSingle.ReplaceAllString(cmd, ""), "")
-	if !cfg.Disabled(ruleChaining) && reChaining.MatchString(stripped) {
-		return blockChaining
-	}
 	if !cfg.Disabled(ruleGitDashC) && reGitDashC.MatchString(cmd) {
 		return blockGitDashC
 	}
